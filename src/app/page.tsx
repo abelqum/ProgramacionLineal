@@ -1,11 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { OptType, Operator, ConstraintInput, Tableau } from "@/lib/types";
+import {
+  OptType,
+  Operator,
+  ConstraintInput,
+  Tableau,
+  LinearProblemInput,
+} from "@/lib/types";
 import { convertToStandardForm } from "@/lib/simplex/parser";
 import { calculateNextTableau } from "@/lib/simplex/engine";
-import { getDualProblem } from "@/lib/simplex/dual"; // IMPORTAMOS LA LÓGICA DUAL
+import { getDualProblem } from "@/lib/simplex/dual";
 import TableauRenderer from "@/components/TableauRenderer";
+import SolutionGraph from "@/components/SolutionGraph";
 
 export default function SimplexSolver() {
   const [numVars, setNumVars] = useState<number>(2);
@@ -17,6 +24,12 @@ export default function SimplexSolver() {
 
   const [tableaus, setTableaus] = useState<Tableau[]>([]);
   const [status, setStatus] = useState<string>("");
+
+  // NUEVOS ESTADOS PARA MANEJAR EL TOGGLE DEL DUAL
+  const [isDual, setIsDual] = useState<boolean>(false);
+  const [primalBackup, setPrimalBackup] = useState<LinearProblemInput | null>(
+    null,
+  );
 
   const addVariable = () => {
     setNumVars((prev) => prev + 1);
@@ -104,18 +117,41 @@ export default function SimplexSolver() {
     setTableaus(localTableaus);
   };
 
-  // NUEVA FUNCIÓN: Transformar a Dual y actualizar la vista
-  const handleConvertToDual = () => {
-    const currentProblem = { numVars, optType, objective, constraints };
-    const dualProblem = getDualProblem(currentProblem);
+  // FUNCIÓN ACTUALIZADA: Alternar entre Primal y Dual
+  const handleToggleDual = () => {
+    if (!isDual) {
+      // 1. Guardar el problema Primal actual en la memoria
+      const currentProblem: LinearProblemInput = {
+        numVars,
+        optType,
+        objective,
+        constraints,
+      };
+      setPrimalBackup(currentProblem);
 
-    setNumVars(dualProblem.numVars);
-    setOptType(dualProblem.optType);
-    setObjective(dualProblem.objective);
-    setConstraints(dualProblem.constraints);
+      // 2. Generar e inyectar el Dual
+      const dualProblem = getDualProblem(currentProblem);
+      setNumVars(dualProblem.numVars);
+      setOptType(dualProblem.optType);
+      setObjective(dualProblem.objective);
+      setConstraints(dualProblem.constraints);
 
-    setTableaus([]); // Limpiamos las tablas porque cambió el problema
-    setStatus("Convertido a Modelo Dual. (Las variables ahora representan Y)");
+      setTableaus([]);
+      setStatus("Convertido a Modelo Dual. (Variables convertidas a Y)");
+      setIsDual(true);
+    } else {
+      // 1. Restaurar el problema Primal desde la memoria
+      if (primalBackup) {
+        setNumVars(primalBackup.numVars);
+        setOptType(primalBackup.optType);
+        setObjective(primalBackup.objective);
+        setConstraints(primalBackup.constraints);
+      }
+
+      setTableaus([]);
+      setStatus("Regresado al Modelo Primal original.");
+      setIsDual(false);
+    }
   };
 
   const handleReset = () => {
@@ -128,22 +164,32 @@ export default function SimplexSolver() {
       <div className="max-w-5xl mx-auto">
         <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-200 mb-8">
           <h1 className="text-4xl font-black mb-2 text-blue-700 tracking-tighter italic">
-            Calculadora método simplex
+            SOLVEX
           </h1>
           <p className="text-slate-500 mb-8 font-medium">
-            Herramienta de programacion lineal
+            Herramienta de programación lineal
           </p>
 
           <div className="flex gap-4 mb-10">
             <button
               onClick={addVariable}
-              className="bg-blue-600 text-white px-5 py-2.5 rounded-lg font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-200 flex items-center gap-2"
+              disabled={isDual} // Desactivamos editar estructura si estamos viendo el Dual
+              className={`px-5 py-2.5 rounded-lg font-bold transition shadow-lg flex items-center gap-2 ${
+                isDual
+                  ? "bg-slate-300 text-slate-500 cursor-not-allowed"
+                  : "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200"
+              }`}
             >
               <span className="text-xl">+</span> Variable
             </button>
             <button
               onClick={addConstraint}
-              className="bg-emerald-600 text-white px-5 py-2.5 rounded-lg font-bold hover:bg-emerald-700 transition shadow-lg shadow-emerald-200 flex items-center gap-2"
+              disabled={isDual}
+              className={`px-5 py-2.5 rounded-lg font-bold transition shadow-lg flex items-center gap-2 ${
+                isDual
+                  ? "bg-slate-300 text-slate-500 cursor-not-allowed"
+                  : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200"
+              }`}
             >
               <span className="text-xl">+</span> Restricción
             </button>
@@ -153,13 +199,19 @@ export default function SimplexSolver() {
             <div className="flex items-center gap-4 mb-6">
               <div className="h-8 w-1 bg-blue-600 rounded-full"></div>
               <h2 className="text-xl font-bold uppercase tracking-widest text-slate-400">
-                Función Objetivo
+                Función Objetivo{" "}
+                {isDual && (
+                  <span className="text-indigo-500 font-black ml-2">
+                    (DUAL)
+                  </span>
+                )}
               </h2>
             </div>
             <div className="flex items-center gap-4 flex-wrap bg-slate-50 p-6 rounded-xl border-2 border-dashed border-slate-200">
               <select
                 value={optType}
                 onChange={(e) => setOptType(e.target.value as OptType)}
+                disabled={isDual}
                 className="bg-white border-2 border-slate-200 p-3 rounded-lg font-bold text-blue-700 focus:border-blue-500 outline-none"
               >
                 <option value="MAX">MAX Z</option>
@@ -177,18 +229,19 @@ export default function SimplexSolver() {
                     onChange={(e) =>
                       handleObjectiveChange(index, e.target.value)
                     }
+                    disabled={isDual}
                     className="w-24 p-3 bg-white border-2 border-slate-200 rounded-lg text-center font-bold focus:border-blue-500 outline-none transition-all"
                     placeholder="0"
                   />
-                  <span className="text-lg font-bold">
-                    {/* Mostramos Y si es problema de minimización por estética, o dejamos X */}
-                    {optType === "MIN" ? "Y" : "X"}
+                  <span className="text-lg font-bold text-slate-700">
+                    {/* Usamos isDual para decidir la letra, más exacto matemáticamente */}
+                    {isDual ? "Y" : "X"}
                     <sub className="text-xs">{index + 1}</sub>
                   </span>
                   {index < numVars - 1 && (
                     <span className="text-slate-300 font-bold text-xl">+</span>
                   )}
-                  {numVars > 1 && (
+                  {numVars > 1 && !isDual && (
                     <button
                       onClick={() => removeVariable(index)}
                       className="absolute -top-3 left-1/2 -translate-x-1/2 bg-red-500 text-white w-5 h-5 rounded-full text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
@@ -229,11 +282,12 @@ export default function SimplexSolver() {
                             e.target.value,
                           )
                         }
+                        disabled={isDual}
                         className="w-20 p-2.5 border-2 border-slate-100 rounded-lg text-center font-semibold focus:border-emerald-500 outline-none"
                         placeholder="0"
                       />
                       <span className="text-sm font-bold text-slate-500">
-                        {optType === "MIN" ? "Y" : "X"}
+                        {isDual ? "Y" : "X"}
                         <sub>{vIndex + 1}</sub>
                       </span>
                       {vIndex < numVars - 1 && (
@@ -249,6 +303,7 @@ export default function SimplexSolver() {
                         .value as Operator;
                       setConstraints(newConstraints);
                     }}
+                    disabled={isDual}
                     className="border-2 border-slate-100 p-2.5 rounded-lg font-black text-slate-700"
                   >
                     <option value="<=">≤</option>
@@ -264,15 +319,18 @@ export default function SimplexSolver() {
                         parseFloat(e.target.value) || 0;
                       setConstraints(newConstraints);
                     }}
+                    disabled={isDual}
                     className="w-28 p-2.5 bg-slate-50 border-2 border-slate-100 rounded-lg text-center font-bold text-emerald-700"
                     placeholder="RHS"
                   />
-                  <button
-                    onClick={() => removeConstraint(constraint.id)}
-                    className="ml-auto bg-slate-100 text-slate-400 w-10 h-10 rounded-xl hover:bg-red-50 hover:text-red-500 transition-all font-bold"
-                  >
-                    ✕
-                  </button>
+                  {!isDual && (
+                    <button
+                      onClick={() => removeConstraint(constraint.id)}
+                      className="ml-auto bg-slate-100 text-slate-400 w-10 h-10 rounded-xl hover:bg-red-50 hover:text-red-500 transition-all font-bold"
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -291,26 +349,46 @@ export default function SimplexSolver() {
             >
               RESOLVER SIMPLEX
             </button>
+
+            {/* BOTÓN TOGGLE: PASAR A DUAL / REGRESAR A PRIMAL */}
             <button
-              onClick={handleConvertToDual}
-              className="flex-1 bg-indigo-500 text-white px-6 py-4 rounded-xl font-bold hover:bg-indigo-600 transition shadow-lg shadow-indigo-200"
+              onClick={handleToggleDual}
+              className={`flex-1 text-white px-6 py-4 rounded-xl font-bold transition shadow-lg ${
+                isDual
+                  ? "bg-purple-600 hover:bg-purple-700 shadow-purple-200"
+                  : "bg-indigo-500 hover:bg-indigo-600 shadow-indigo-200"
+              }`}
             >
-              PASAR A DUAL
+              {isDual ? "REGRESAR A PRIMAL" : "PASAR A DUAL"}
             </button>
+
             <button
               onClick={handleReset}
               className="px-6 py-4 border-2 border-slate-100 rounded-xl font-bold text-slate-400 hover:bg-red-50 hover:text-red-500 hover:border-red-100 transition-all"
             >
-              LIMPIAR
+              LIMPIAR RESULTADOS
             </button>
           </div>
         </div>
 
+        {/* INYECCIÓN DEL GRÁFICO */}
+        {tableaus.length > 0 && numVars === 2 && constraints.length > 0 && (
+          <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <SolutionGraph
+              constraints={constraints}
+              objective={objective}
+              optType={optType}
+            />
+          </div>
+        )}
+
+        {/* SECCIÓN DE TABLAS */}
         {tableaus.length > 0 && (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
               <h2 className="text-2xl font-black text-slate-800 tracking-tight italic">
-                PROCEDIMIENTO
+                PROCEDIMIENTO{" "}
+                {isDual && <span className="text-purple-600">(DUAL)</span>}
               </h2>
               <div
                 className={`px-4 py-2 rounded-full font-bold text-sm ${status.includes("Óptima") ? "bg-green-500 text-white" : "bg-blue-500 text-white"}`}

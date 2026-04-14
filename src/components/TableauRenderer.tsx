@@ -35,12 +35,16 @@ export default function TableauRenderer({
 }: Props) {
   const rhsIndex = tableau.headers.length - 1;
 
-  // Extraer valores de las variables de decisión (X) y holgura (S)
+  // Extraer valores de las variables de decisión (X), holgura/exceso (S) y artificiales (A)
   const getSolutionValues = () => {
     const values: { name: string; value: string }[] = [];
     tableau.headers.slice(0, -1).forEach((header) => {
-      // Solo mostramos X y S en el resumen principal
-      if (header.startsWith("X") || header.startsWith("S")) {
+      // AQUÍ ESTÁ LA CORRECCIÓN: Agregamos header.startsWith('A')
+      if (
+        header.startsWith("X") ||
+        header.startsWith("S") ||
+        header.startsWith("A")
+      ) {
         const basicIndex = tableau.basicVariables.indexOf(header);
 
         if (basicIndex !== -1) {
@@ -192,7 +196,7 @@ export default function TableauRenderer({
           {/* Valores de las variables */}
           <div>
             <p className="text-[10px] font-bold text-slate-400 mb-2 uppercase">
-              Variables de Decisión y Holgura
+              Variables de Decisión, Holgura y Artificiales
             </p>
             <div className="flex flex-wrap gap-2">
               {solutionValues.map((v, i) => (
@@ -200,7 +204,9 @@ export default function TableauRenderer({
                   key={i}
                   className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm"
                 >
-                  <span className="font-bold text-slate-700 text-sm">
+                  <span
+                    className={`font-bold text-sm ${v.name.startsWith("A") ? "text-red-500" : "text-slate-700"}`}
+                  >
                     {v.name}
                   </span>
                   <span className="font-mono font-bold text-blue-600">
