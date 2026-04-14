@@ -27,8 +27,13 @@ export default function SolutionGraph({
   objective,
   optType,
 }: Props) {
-  const { lines, feasiblePolygon, optimalPoint, maxValue } = useMemo(() => {
-    // 1. Tipado estricto para las líneas calculadas
+  // CORRECCIÓN: Le decimos a useMemo EXACTAMENTE qué devuelve
+  const { lines, feasiblePolygon, optimalPoint, maxValue } = useMemo<{
+    lines: ComputedLine[];
+    feasiblePolygon: Point[];
+    optimalPoint: Point | null;
+    maxValue: number;
+  }>(() => {
     const computedLines: ComputedLine[] = constraints.map((c) => {
       const a = c.coefficients[0] || 0;
       const b = c.coefficients[1] || 0;
@@ -51,7 +56,6 @@ export default function SolutionGraph({
       { a: 0, b: 1, c: 0, op: ">=" },
     ];
 
-    // 2. Tipado estricto para las intersecciones
     const intersections: Point[] = [];
     for (let i = 0; i < allBoundaryLines.length; i++) {
       for (let j = i + 1; j < allBoundaryLines.length; j++) {
@@ -67,7 +71,6 @@ export default function SolutionGraph({
       }
     }
 
-    // 3. Tipado estricto para los puntos válidos
     const validPoints: Point[] = [];
     intersections.forEach((p: Point) => {
       if (p.x < -1e-7 || p.y < -1e-7) return;
@@ -92,7 +95,6 @@ export default function SolutionGraph({
       }
     });
 
-    // 4. Tipado estricto en los reduces
     const cx =
       validPoints.reduce((sum: number, p: Point) => sum + p.x, 0) /
       (validPoints.length || 1);
@@ -104,7 +106,6 @@ export default function SolutionGraph({
         Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx),
     );
 
-    // 5. Encontrar el punto ÓPTIMO
     let bestPoint: Point | null = null;
     let bestZ = optType === "MAX" ? -Infinity : Infinity;
 
@@ -120,7 +121,6 @@ export default function SolutionGraph({
       }
     });
 
-    // 6. Cálculo de máximo con tipado estricto
     const globalMax = computedLines.reduce(
       (max: number, line: ComputedLine) => {
         const p1x = line.p1 ? line.p1.x : 0;
@@ -380,7 +380,9 @@ export default function SolutionGraph({
             {constraints.map((c, i) => (
               <div key={i} className="flex items-center gap-2 mb-2">
                 <div
-                  className={`w-4 h-1 rounded-full ${i % 2 === 0 ? "bg-blue-500" : "bg-amber-500"}`}
+                  className={`w-4 h-1 rounded-full ${
+                    i % 2 === 0 ? "bg-blue-500" : "bg-amber-500"
+                  }`}
                 ></div>
                 <span className="font-mono font-medium text-slate-700">
                   R{i + 1}: {c.coefficients[0]}X₁ + {c.coefficients[1]}X₂{" "}
